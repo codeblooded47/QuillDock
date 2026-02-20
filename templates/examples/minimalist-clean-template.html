@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{DOCUMENT_TITLE}}</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Spectral:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #ffffff;
+        --font-ui: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+        --font-doc: "Spectral", "Georgia", serif;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font-ui);
+        background: #fafafa;
+        color: #172536;
+        padding: 40px 20px;
+        line-height: 1.6;
+      }
+      .doc-container {
+        max-width: 210mm; /* A4 width */
+        margin: 0 auto;
+        background: var(--surface);
+        padding: 40px 60px;
+        min-height: 297mm; /* A4 height */
+      }
+      .doc-header {
+        margin-bottom: 22px;
+        padding-bottom: 22px;
+        border-bottom: 1px solid transparent; /* matches workspace looking clean */
+      }
+      .doc-header h1 {
+        margin: 0;
+        font-family: var(--font-doc);
+        font-size: 34px;
+        font-weight: 600;
+        color: #172536;
+      }
+      .doc-header .meta {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #58687a;
+        font-family: var(--font-ui);
+      }
+      .editor-content {
+        font-family: var(--font-doc);
+        font-size: 18px;
+        line-height: 1.6;
+        color: #172536;
+        white-space: pre-wrap;
+      }
+      /* First line bolding to mimic Editor.js first block */
+      .overview-content {
+        font-family: var(--font-doc);
+        font-size: 18px;
+        line-height: 1.6;
+        color: #172536;
+      }
+      .overview-content::first-line {
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .section-list {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        margin-top: 18px;
+      }
+      .section-item {
+        margin-bottom: 24px;
+      }
+
+      .image-container {
+        margin: 18px 0 24px;
+        position: relative;
+      }
+      .image-container img {
+        display: block;
+        width: 100%;
+        max-height: 560px;
+        object-fit: contain;
+        border-radius: 10px;
+        background: #f7faff;
+      }
+
+      .note-content {
+        font-family: var(--font-doc);
+        font-size: 18px;
+        line-height: 1.6;
+        color: #172536;
+        white-space: pre-wrap;
+      }
+
+      @media print {
+        body {
+          background: white;
+          padding: 0;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .doc-container {
+          border: none;
+          padding: 0;
+          max-width: 210mm;
+          width: 100%;
+          min-height: auto;
+        }
+        .section-item {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        .image-container img {
+          max-height: 200mm;
+        }
+        @page {
+          size: A4 portrait;
+          margin: 15mm 20mm;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="doc-container">
+      <header class="doc-header">
+        <h1>{{DOCUMENT_TITLE}}</h1>
+        <div class="meta">
+          Generated {{GENERATED_AT}} • {{SECTION_COUNT}} captures
+        </div>
+      </header>
+
+      <div class="overview-content">{{OVERVIEW}}</div>
+
+      <div class="section-list">
+        {{#SECTIONS}}
+        <article class="section-item">
+          <div class="image-container">
+            <img src="{{IMAGE_DATA}}" alt="Capture {{INDEX}}" />
+          </div>
+          <div class="note-content">{{NOTE}}</div>
+        </article>
+        {{/SECTIONS}}
+      </div>
+    </div>
+  </body>
+</html>

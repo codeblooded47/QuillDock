@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{DOCUMENT_TITLE}}</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary: #4f46e5;
+        --primary-light: #e0e7ff;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --text: #0f172a;
+        --text-muted: #64748b;
+        --border: #e2e8f0;
+        --radius: 16px;
+      }
+      body {
+        margin: 0;
+        font-family: "Outfit", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 40px 20px;
+        line-height: 1.6;
+      }
+      .doc-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow:
+          0 20px 40px rgba(0, 0, 0, 0.04),
+          0 1px 3px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+      }
+      .doc-header {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        padding: 60px 40px;
+        color: white;
+        text-align: center;
+      }
+      .doc-header h1 {
+        margin: 0 0 16px 0;
+        font-size: 42px;
+        font-weight: 700;
+        letter-spacing: -1px;
+      }
+      .doc-header .meta {
+        font-size: 14px;
+        opacity: 0.8;
+        font-weight: 300;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+      .doc-body {
+        padding: 40px;
+      }
+      .overview-card {
+        background: var(--primary-light);
+        border-left: 4px solid var(--primary);
+        padding: 24px;
+        border-radius: 8px;
+        margin-bottom: 40px;
+        color: #3730a3;
+      }
+      .overview-title {
+        font-weight: 700;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        font-size: 14px;
+        letter-spacing: 1px;
+      }
+      .section-list {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+      }
+      .section-item {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 24px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 30px;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+      .section-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+      }
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px dashed var(--border);
+        padding-bottom: 16px;
+        margin-bottom: 20px;
+      }
+      .badge {
+        background: var(--primary);
+        color: white;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .page-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--text);
+        margin: 0;
+      }
+      .page-url {
+        font-size: 13px;
+        color: var(--primary);
+        text-decoration: none;
+      }
+      .section-content {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+      .image-container {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+      }
+      .image-container img {
+        max-width: 100%;
+        max-height: 500px;
+        border-radius: 8px;
+        object-fit: contain;
+      }
+      .note-content {
+        font-size: 16px;
+        color: var(--text-muted);
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 12px;
+        border-left: 4px solid #cbd5e1;
+        white-space: pre-wrap;
+      }
+      @media (min-width: 768px) {
+        .doc-body {
+          padding: 60px;
+        }
+      }
+      @media print {
+        body {
+          background: white;
+          padding: 0;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .doc-container {
+          box-shadow: none;
+          border: none;
+        }
+        .section-item {
+          break-inside: avoid;
+          page-break-inside: avoid;
+          border-color: #ddd;
+        }
+        .doc-header {
+          color: black;
+          background: #f8fafc;
+          border-bottom: 2px solid #ddd;
+        }
+        .doc-header h1 {
+          color: black;
+        }
+        .doc-header .meta {
+          color: #666;
+        }
+        .badge {
+          background: #ddd;
+          color: black;
+        }
+        @page {
+          margin: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="doc-container">
+      <div class="doc-header">
+        <h1>{{DOCUMENT_TITLE}}</h1>
+        <div class="meta">Generated {{GENERATED_AT}}</div>
+      </div>
+
+      <div class="doc-body">
+        <div class="overview-card">
+          <div class="overview-title">Executive Summary</div>
+          <div style="white-space: pre-wrap">{{OVERVIEW}}</div>
+        </div>
+
+        <div class="section-list">
+          {{#SECTIONS}}
+          <div class="section-item">
+            <div class="section-header">
+              <div>
+                <h3 class="page-title">{{PAGE_TITLE}}</h3>
+                <a href="{{PAGE_URL}}" class="page-url" target="_blank"
+                  >{{PAGE_URL}}</a
+                >
+              </div>
+              <span class="badge">{{CAPTURE_TYPE}}</span>
+            </div>
+
+            <div class="section-content">
+              <div class="image-container">
+                <img src="{{IMAGE_DATA}}" alt="Capture {{INDEX}}" />
+              </div>
+
+              <div class="note-content">{{NOTE}}</div>
+            </div>
+          </div>
+          {{/SECTIONS}}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
