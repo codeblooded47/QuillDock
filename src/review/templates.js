@@ -1,0 +1,53 @@
+export const DEFAULT_TEMPLATE_ID = "classic";
+
+export const PDF_TEMPLATES = [
+  {
+    id: "classic",
+    className: "template-classic",
+    name: "Classic Brief",
+    description: "Google-Docs-like structure for polished team handoff documents.",
+    baseHtmlFile: "templates/base-document-template.html"
+  },
+  {
+    id: "spotlight",
+    className: "template-spotlight",
+    name: "Spotlight Guide",
+    description: "Bold callouts with strong section framing for feature walkthroughs.",
+    baseHtmlFile: "templates/examples/feature-walkthrough-template.html"
+  },
+  {
+    id: "dossier",
+    className: "template-dossier",
+    name: "Dossier Notes",
+    description: "Report-style layout with softer tones for audits and stakeholder updates.",
+    baseHtmlFile: "templates/examples/audit-letter-template.html"
+  },
+  {
+    id: "blueprint",
+    className: "template-blueprint",
+    name: "Blueprint Flow",
+    description: "Technical look with clean dividers for engineering documentation.",
+    baseHtmlFile: "templates/base-document-template.html"
+  }
+];
+
+export function normalizeTemplateId(templateId) {
+  return PDF_TEMPLATES.some((template) => template.id === templateId)
+    ? templateId
+    : DEFAULT_TEMPLATE_ID;
+}
+
+export function getTemplateById(templateId) {
+  const normalizedTemplateId = normalizeTemplateId(templateId);
+  return PDF_TEMPLATES.find((template) => template.id === normalizedTemplateId) || PDF_TEMPLATES[0];
+}
+
+export function captureTypeLabel(captureType) {
+  const labels = {
+    visible: "Visible",
+    selection: "Selection",
+    fullpage: "Full Page"
+  };
+
+  return labels[captureType] || "Capture";
+}

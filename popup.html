@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Website Documentation Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <h1>Website Docs Capture</h1>
+        <p>Capture while browsing, then refine everything in one review document.</p>
+      </header>
+
+      <section class="capture-controls">
+        <button id="captureVisibleBtn" class="primary">Capture Visible Area</button>
+        <button id="captureSelectionBtn" class="secondary">Capture Selected Area</button>
+        <button id="captureFullBtn" class="secondary">Capture Full Page</button>
+      </section>
+
+      <p id="statusText" class="status" role="status">Ready.</p>
+
+      <section id="quickNoteSection" class="quick-note hidden">
+        <h2>Add Notes To Latest Capture</h2>
+        <div class="annotator">
+          <div class="annotator-toolbar">
+            <div class="tool-group">
+              <button id="drawPenBtn" class="tool-btn active" type="button">Pen</button>
+              <button id="drawRectBtn" class="tool-btn" type="button">Rectangle</button>
+              <button id="drawArrowBtn" class="tool-btn" type="button">Arrow</button>
+            </div>
+
+            <div class="tool-group">
+              <label class="color-input-wrap" title="Stroke color">
+                <span>Color</span>
+                <input id="strokeColorInput" type="color" value="#ff0000" />
+              </label>
+
+              <label class="size-input-wrap" title="Stroke size">
+                <span>Size</span>
+                <input id="strokeWidthInput" type="range" min="1" max="12" step="1" value="3" />
+              </label>
+            </div>
+
+            <div class="tool-group">
+              <button id="undoDrawBtn" class="tool-btn" type="button">Undo</button>
+              <button id="clearDrawBtn" class="tool-btn" type="button">Clear</button>
+              <button id="applyMarkupBtn" class="secondary" type="button">Apply Markup</button>
+            </div>
+          </div>
+
+          <div id="canvasViewport" class="canvas-viewport">
+            <canvas id="annotationCanvas" aria-label="Screenshot annotation canvas"></canvas>
+          </div>
+
+          <p class="annotator-help">
+            Draw on the screenshot, then click Apply Markup to save edits.
+          </p>
+        </div>
+        <textarea
+          id="noteInput"
+          placeholder="Write what this screen explains, key flows, validations, or issues..."
+        ></textarea>
+        <button id="saveNoteBtn" class="primary">Save Note</button>
+      </section>
+
+      <footer class="popup-footer">
+        <div id="captureCount" class="capture-count">0 captures saved</div>
+        <button id="openReviewBtn" class="review-btn">Open Review Workspace</button>
+      </footer>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

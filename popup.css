@@ -1,0 +1,239 @@
+:root {
+  --bg: #f3f7fb;
+  --panel: #ffffff;
+  --ink: #16202d;
+  --muted: #4b5b6e;
+  --line: #d5deea;
+  --brand: #1a73e8;
+  --brand-strong: #0e56b5;
+  --shadow: 0 12px 28px rgba(17, 31, 52, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 360px;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at top, #e3efff 0%, var(--bg) 54%, #ecf2f8 100%);
+}
+
+.popup-shell {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.popup-header {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.popup-header h1 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+
+.popup-header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.capture-controls {
+  display: grid;
+  gap: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primary {
+  background: var(--brand);
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(26, 115, 232, 0.24);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.secondary {
+  background: #dfeaf8;
+  color: #0f2e58;
+}
+
+.secondary:hover:not(:disabled) {
+  background: #d0e2f7;
+}
+
+.status {
+  margin: 0;
+  min-height: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.quick-note {
+  display: grid;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.quick-note h2 {
+  margin: 0;
+  font-size: 13px;
+  color: #0f2e58;
+}
+
+.annotator {
+  display: grid;
+  gap: 8px;
+}
+
+.annotator-toolbar {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d0ddee;
+  border-radius: 10px;
+  background: #f3f8ff;
+  padding: 8px;
+}
+
+.tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tool-btn {
+  background: #e5eef9;
+  color: #173e68;
+  padding: 7px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.tool-btn.active {
+  background: #1a73e8;
+  color: #ffffff;
+}
+
+.color-input-wrap,
+.size-input-wrap {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: #1a3e6c;
+  background: #ebf3ff;
+  border: 1px solid #cfddf1;
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.color-input-wrap input[type="color"] {
+  width: 24px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.size-input-wrap input[type="range"] {
+  width: 92px;
+}
+
+.canvas-viewport {
+  border: 1px solid #d0dded;
+  border-radius: 10px;
+  background: #ffffff;
+  max-height: 240px;
+  overflow: auto;
+  padding: 6px;
+}
+
+#annotationCanvas {
+  display: block;
+  border-radius: 8px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.annotator-help {
+  margin: 0;
+  font-size: 11px;
+  color: #5b6e84;
+}
+
+.quick-note textarea {
+  width: 100%;
+  min-height: 90px;
+  border: 1px solid #c5d3e6;
+  border-radius: 10px;
+  padding: 10px;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  background: #f8fbff;
+}
+
+.quick-note textarea:focus {
+  outline: 2px solid rgba(26, 115, 232, 0.3);
+  border-color: #1a73e8;
+}
+
+.hidden {
+  display: none;
+}
+
+.popup-footer {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+
+.capture-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.review-btn {
+  background: #183a67;
+  color: #ffffff;
+}
+
+.review-btn:hover:not(:disabled) {
+  background: #102d53;
+}
