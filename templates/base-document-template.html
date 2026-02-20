@@ -102,6 +102,8 @@
       .section-url {
         font-size: 12px;
         color: var(--muted);
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
 
       .section-image {
@@ -113,6 +115,42 @@
         border-radius: 8px;
         background: #ffffff;
         margin: 12px auto;
+      }
+
+      @media print {
+        @page {
+          size: auto;
+          margin: 0;
+        }
+
+        body {
+          background: #ffffff;
+          margin: 0;
+          padding: 0;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .paper {
+          box-shadow: none;
+          width: 100%;
+          max-width: 100%;
+          margin: 0;
+          border-radius: 0;
+        }
+
+        .section {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+
+        .section-image {
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: none !important;
+          object-position: top left;
+        }
       }
     </style>
   </head>
@@ -128,7 +166,22 @@
         <div class="overview-box">{{OVERVIEW}}</div>
       </section>
 
-      <section class="sections">{{SECTIONS_HTML}}</section>
+      <section class="sections">
+        {{#SECTIONS}}
+        <article class="section">
+          <div class="section-meta">
+            <span class="badge">{{CAPTURE_TYPE}}</span>
+            <span class="section-url">{{PAGE_URL}}</span>
+            <span class="section-time">{{TIMESTAMP}}</span>
+          </div>
+
+          <img class="section-image" src="{{IMAGE_DATA}}" alt="Capture {{INDEX}}" />
+
+          <h4>Documentation Notes</h4>
+          <div class="section-note">{{NOTE}}</div>
+        </article>
+        {{/SECTIONS}}
+      </section>
     </article>
   </body>
 </html>

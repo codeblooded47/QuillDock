@@ -1,4 +1,5 @@
 export const DEFAULT_TEMPLATE_ID = "classic";
+export const DEFAULT_SECTION_TEMPLATE_FILE = "templates/base-section-template.html";
 
 export const PDF_TEMPLATES = [
   {
@@ -6,28 +7,32 @@ export const PDF_TEMPLATES = [
     className: "template-classic",
     name: "Classic Brief",
     description: "Google-Docs-like structure for polished team handoff documents.",
-    baseHtmlFile: "templates/base-document-template.html"
+    baseHtmlFile: "templates/base-document-template.html",
+    sectionHtmlFile: DEFAULT_SECTION_TEMPLATE_FILE
   },
   {
     id: "spotlight",
     className: "template-spotlight",
     name: "Spotlight Guide",
     description: "Bold callouts with strong section framing for feature walkthroughs.",
-    baseHtmlFile: "templates/examples/feature-walkthrough-template.html"
+    baseHtmlFile: "templates/examples/feature-walkthrough-template.html",
+    sectionHtmlFile: DEFAULT_SECTION_TEMPLATE_FILE
   },
   {
     id: "dossier",
     className: "template-dossier",
     name: "Dossier Notes",
     description: "Report-style layout with softer tones for audits and stakeholder updates.",
-    baseHtmlFile: "templates/examples/audit-letter-template.html"
+    baseHtmlFile: "templates/examples/audit-letter-template.html",
+    sectionHtmlFile: DEFAULT_SECTION_TEMPLATE_FILE
   },
   {
     id: "blueprint",
     className: "template-blueprint",
     name: "Blueprint Flow",
     description: "Technical look with clean dividers for engineering documentation.",
-    baseHtmlFile: "templates/base-document-template.html"
+    baseHtmlFile: "templates/base-document-template.html",
+    sectionHtmlFile: DEFAULT_SECTION_TEMPLATE_FILE
   }
 ];
 

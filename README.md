@@ -10,7 +10,11 @@ This extension lets you browse a site and build documentation as you go:
 - Review and edit all notes in a Docs-like workspace
 - Open each capture in a **full-screen editor modal** for annotation + note editing
 - Export the final document with **multiple PDF design templates + preview**
+- Edit template HTML directly (document + per-section UI) with variable placeholders and section loops
 - Review workspace is now built with **React + Vite**
+- Workspace documentation page is now fully **Editor.js** based
+- Each screenshot is inserted as an **Editor.js image block** and can be reopened for annotation edits
+- Modal note editor also uses **Editor.js**
 
 ## Development Setup
 
@@ -49,6 +53,7 @@ Optional local UI development for review page:
 8. Click a list item anytime to re-open the modal and edit.
 9. Click `Open Workspace` for full document editing.
 10. Click `Export As PDF`, pick a template, preview it, then export.
+11. In template modal, edit `Document HTML Template` or `Section HTML Template` and use variables like `{{PAGE_URL}}` or loop `{{#SECTIONS}}...{{/SECTIONS}}`.
 
 ## Template Base + Docs
 
@@ -56,6 +61,8 @@ Optional local UI development for review page:
   `QuillDock/templates/TEMPLATE_GUIDE.md`
 - Base reusable HTML:
   `QuillDock/templates/base-document-template.html`
+- Base reusable section HTML:
+  `QuillDock/templates/base-section-template.html`
 - Example template letters:
   `QuillDock/templates/examples/feature-walkthrough-template.html`
   `QuillDock/templates/examples/audit-letter-template.html`

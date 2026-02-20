@@ -16,8 +16,25 @@ Use these tokens in any template HTML:
 - `{{GENERATED_AT}}`
 - `{{OVERVIEW}}`
 - `{{SECTIONS_HTML}}`
+- `{{SECTION_COUNT}}`
+- `{{#SECTIONS}} ... {{/SECTIONS}}` (loop each capture directly inside document template)
 
 `{{SECTIONS_HTML}}` should contain repeated section blocks from your captures (image + note).
+
+## Section Variables
+
+Inside `section` templates, or inside `{{#SECTIONS}}...{{/SECTIONS}}`, you can use:
+
+- `{{INDEX}}`
+- `{{CAPTURE_ID}}`
+- `{{CAPTURE_TYPE}}`
+- `{{CAPTURE_TYPE_RAW}}`
+- `{{PAGE_TITLE}}`
+- `{{PAGE_URL}}`
+- `{{TIMESTAMP}}`
+- `{{NOTE}}` (line breaks preserved as `<br />`)
+- `{{NOTE_TEXT}}` (plain escaped text)
+- `{{IMAGE_DATA}}`
 
 ## Create a New Template Letter
 
@@ -31,6 +48,21 @@ Use these tokens in any template HTML:
    - `description`
    - `baseHtmlFile`
 5. Add CSS rules in `/review.css` for the new `className` (e.g. `.paper.template-your-id`).
+
+## In-App Template Editor
+
+In Export modal you can now edit:
+
+- Document HTML Template
+- Section HTML Template
+
+You can:
+
+- Save your edits (`Save Template`)
+- Reset to original example (`Reset To Example`)
+- Export with your edited template
+
+The edits are persisted in extension storage under `templateOverrides`.
 
 ## CSS Contract (React Workspace)
 

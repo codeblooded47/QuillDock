@@ -35,6 +35,7 @@ function normalizeCapture(record) {
     title: record.title,
     imageData: record.imageData,
     note: record.note || "",
+    noteBlocks: record.noteBlocks || null,
     captureType: record.captureType,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

@@ -7,7 +7,14 @@ import {
   updateCapture
 } from "../../db.js";
 import { loadMeta, saveMeta } from "./storage.js";
+import EditorJsField from "./EditorJsField.jsx";
 import {
+  editorDataToPlainText,
+  normalizeEditorData,
+  textToEditorData
+} from "./editorjs-utils.js";
+import {
+  DEFAULT_SECTION_TEMPLATE_FILE,
   DEFAULT_TEMPLATE_ID,
   PDF_TEMPLATES,
   captureTypeLabel,
@@ -19,11 +26,38 @@ const TOOL_PEN = "pen";
 const TOOL_RECT = "rect";
 const TOOL_ARROW = "arrow";
 const TOOL_TEXT = "text";
+const TEMPLATE_LOOP_START = "{{#SECTIONS}}";
+const TEMPLATE_LOOP_END = "{{/SECTIONS}}";
+const CAPTURE_MARKER_PREFIX = "[capture-id:";
+const CAPTURE_MARKER_REGEX = /\[capture-id:([^\]]+)\]/;
+const TEMPLATE_VARIABLES = [
+  "{{DOCUMENT_TITLE}}",
+  "{{GENERATED_AT}}",
+  "{{OVERVIEW}}",
+  "{{OVERVIEW_TEXT}}",
+  "{{SECTION_COUNT}}",
+  "{{SECTIONS_HTML}}",
+  "{{#SECTIONS}} ... {{/SECTIONS}}",
+  "{{INDEX}}",
+  "{{CAPTURE_ID}}",
+  "{{CAPTURE_TYPE}}",
+  "{{CAPTURE_TYPE_RAW}}",
+  "{{PAGE_TITLE}}",
+  "{{PAGE_URL}}",
+  "{{TIMESTAMP}}",
+  "{{NOTE}}",
+  "{{NOTE_TEXT}}",
+  "{{IMAGE_DATA}}"
+];
 
 export default function App() {
   const [captures, setCaptures] = useState([]);
   const [docTitle, setDocTitle] = useState("");
   const [overview, setOverview] = useState("");
+  const [workspaceBlocks, setWorkspaceBlocks] = useState(() => ({ blocks: [] }));
+  const [hiddenCaptureIds, setHiddenCaptureIds] = useState(() => []);
+  const [workspaceEditorRevision, setWorkspaceEditorRevision] = useState(0);
+  const [overviewBlocks, setOverviewBlocks] = useState(() => textToEditorData(""));
   const [selectedTemplateId, setSelectedTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(Date.now());
 
@@ -33,11 +67,20 @@ export default function App() {
 
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [templateSelectionId, setTemplateSelectionId] = useState(DEFAULT_TEMPLATE_ID);
+  const [templateOverrides, setTemplateOverrides] = useState({});
+  const [templateDocumentInput, setTemplateDocumentInput] = useState("");
+  const [templateSectionInput, setTemplateSectionInput] = useState("");
+  const [templateDefaultDocument, setTemplateDefaultDocument] = useState("");
+  const [templateDefaultSection, setTemplateDefaultSection] = useState("");
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templatePreviewError, setTemplatePreviewError] = useState("");
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorCaptureId, setEditorCaptureId] = useState(null);
   const [editorCaptureTitle, setEditorCaptureTitle] = useState("Edit Screenshot");
   const [editorNote, setEditorNote] = useState("");
+  const [editorNoteBlocks, setEditorNoteBlocks] = useState(() => textToEditorData(""));
+  const [editorNoteEditorRevision, setEditorNoteEditorRevision] = useState(0);
   const [modalBusy, setModalBusy] = useState(false);
   const [modalTool, setModalTool] = useState(TOOL_PEN);
   const [modalStrokeColor, setModalStrokeColor] = useState("#ff0000");
@@ -46,10 +89,12 @@ export default function App() {
   const [shapeVersion, setShapeVersion] = useState(0);
 
   const capturesRef = useRef([]);
-  const sectionRefs = useRef(new Map());
+  const workspaceBlocksRef = useRef({ blocks: [] });
+  const hiddenCaptureIdsRef = useRef([]);
   const metaSaveTimerRef = useRef(null);
   const noteSaveTimersRef = useRef(new Map());
   const dirtyNoteIdsRef = useRef(new Set());
+  const templateSourceCacheRef = useRef(new Map());
 
   const modalCanvasWrapRef = useRef(null);
   const modalCanvasRef = useRef(null);
@@ -66,6 +111,32 @@ export default function App() {
   const selectedTemplate = useMemo(() => getTemplateById(selectedTemplateId), [selectedTemplateId]);
   const selectedTemplateClassName = selectedTemplate.className;
   const templateForModal = useMemo(() => getTemplateById(templateSelectionId), [templateSelectionId]);
+  const exportCaptures = useMemo(
+    () => buildExportCapturesFromWorkspace(captures, workspaceBlocks, hiddenCaptureIds),
+    [captures, hiddenCaptureIds, workspaceBlocks]
+  );
+  const templatePreviewResult = useMemo(() => {
+    if (!templateDocumentInput.trim()) {
+      return { html: "", error: "" };
+    }
+
+    try {
+      const html = renderDocumentationTemplate({
+        documentTemplate: templateDocumentInput,
+        sectionTemplate: templateSectionInput,
+        title: docTitle.trim() || "Untitled Documentation",
+        overview,
+        captures: exportCaptures
+      });
+
+      return { html, error: "" };
+    } catch (error) {
+      return {
+        html: "",
+        error: error?.message || "Failed to render preview HTML. Check your template variables."
+      };
+    }
+  }, [docTitle, exportCaptures, overview, templateDocumentInput, templateSectionInput]);
 
   const captureCountLabel = useMemo(() => {
     const count = captures.length;
@@ -85,16 +156,33 @@ export default function App() {
 
   const persistMetaNow = useCallback(
     async (overrides = {}) => {
+      const normalizedWorkspaceBlocks = normalizeEditorData(overrides.workspaceBlocks ?? workspaceBlocks, "");
       const meta = {
         title: (overrides.title ?? docTitle).trim(),
         overview: (overrides.overview ?? overview).trim(),
-        templateId: normalizeTemplateId(overrides.templateId ?? selectedTemplateId)
+        overviewBlocks: normalizeEditorData(overrides.overviewBlocks ?? overviewBlocks),
+        workspaceBlocks: serializeWorkspaceBlocks(normalizedWorkspaceBlocks),
+        hiddenCaptureIds: normalizeHiddenCaptureIds(
+          overrides.hiddenCaptureIds ?? hiddenCaptureIds,
+          capturesRef.current
+        ),
+        templateId: normalizeTemplateId(overrides.templateId ?? selectedTemplateId),
+        templateOverrides: overrides.templateOverrides ?? templateOverrides
       };
 
       await saveMeta(meta);
       touchDocument();
     },
-    [docTitle, overview, selectedTemplateId, touchDocument]
+    [
+      docTitle,
+      hiddenCaptureIds,
+      overview,
+      overviewBlocks,
+      selectedTemplateId,
+      templateOverrides,
+      touchDocument,
+      workspaceBlocks
+    ]
   );
 
   const scheduleMetaSave = useCallback(
@@ -110,41 +198,85 @@ export default function App() {
     [persistMetaNow]
   );
 
-  const refreshCaptures = useCallback(async () => {
-    const nextCaptures = await getAllCaptures();
-    capturesRef.current = nextCaptures;
-    setCaptures(nextCaptures);
-    touchDocument();
-    return nextCaptures;
-  }, [touchDocument]);
+  const getTemplateDefaults = useCallback(async (templateId) => {
+    const normalizedTemplateId = normalizeTemplateId(templateId);
 
-  const saveNoteImmediately = useCallback(
-    async (captureId, note) => {
-      const pendingTimer = noteSaveTimersRef.current.get(captureId);
-      if (pendingTimer) {
-        clearTimeout(pendingTimer);
-        noteSaveTimersRef.current.delete(captureId);
+    if (templateSourceCacheRef.current.has(normalizedTemplateId)) {
+      return templateSourceCacheRef.current.get(normalizedTemplateId);
+    }
+
+    const template = getTemplateById(normalizedTemplateId);
+    const [documentTemplate, sectionTemplate] = await Promise.all([
+      loadTemplateText(template.baseHtmlFile),
+      loadTemplateText(template.sectionHtmlFile || DEFAULT_SECTION_TEMPLATE_FILE)
+    ]);
+
+    const defaults = { documentTemplate, sectionTemplate };
+    templateSourceCacheRef.current.set(normalizedTemplateId, defaults);
+    return defaults;
+  }, []);
+
+  const syncTemplateEditorFromSelection = useCallback(
+    async (templateId, shouldStoreDefaults = false) => {
+      const normalizedTemplateId = normalizeTemplateId(templateId);
+      setTemplateLoading(true);
+      setTemplatePreviewError("");
+
+      try {
+        const defaults = await getTemplateDefaults(normalizedTemplateId);
+        const override = templateOverrides[normalizedTemplateId] || {};
+
+        setTemplateDocumentInput(override.documentTemplate ?? defaults.documentTemplate);
+        setTemplateSectionInput(override.sectionTemplate ?? defaults.sectionTemplate);
+
+        if (shouldStoreDefaults) {
+          setTemplateDefaultDocument(defaults.documentTemplate);
+          setTemplateDefaultSection(defaults.sectionTemplate);
+        }
+      } catch (error) {
+        console.error(error);
+        setTemplatePreviewError(error?.message || "Failed to load template files.");
+      } finally {
+        setTemplateLoading(false);
       }
-
-      dirtyNoteIdsRef.current.add(captureId);
-      await updateCapture(captureId, { note: note.trim() });
-      dirtyNoteIdsRef.current.delete(captureId);
-      touchDocument();
     },
-    [touchDocument]
+    [getTemplateDefaults, templateOverrides]
   );
 
+  const refreshCaptures = useCallback(async () => {
+    const loadedCaptures = await getAllCaptures();
+    const nextCaptures = loadedCaptures.map((capture) => normalizeCaptureForEditor(capture));
+    const nextHiddenCaptureIds = normalizeHiddenCaptureIds(hiddenCaptureIdsRef.current, nextCaptures);
+    const nextWorkspaceBlocks = syncWorkspaceBlocksWithCaptures({
+      workspaceBlocks: workspaceBlocksRef.current,
+      captures: nextCaptures,
+      overview,
+      hiddenCaptureIds: nextHiddenCaptureIds
+    });
+
+    capturesRef.current = nextCaptures;
+    workspaceBlocksRef.current = nextWorkspaceBlocks;
+    hiddenCaptureIdsRef.current = nextHiddenCaptureIds;
+    setCaptures(nextCaptures);
+    setHiddenCaptureIds(nextHiddenCaptureIds);
+    setWorkspaceBlocks(nextWorkspaceBlocks);
+    setWorkspaceEditorRevision((current) => current + 1);
+    touchDocument();
+    return nextCaptures;
+  }, [overview, touchDocument]);
+
   const scheduleNoteSave = useCallback(
-    (captureId, note) => {
+    (captureId, note, noteBlocks) => {
       const pendingTimer = noteSaveTimersRef.current.get(captureId);
       if (pendingTimer) {
         clearTimeout(pendingTimer);
       }
 
       dirtyNoteIdsRef.current.add(captureId);
+      const normalizedNoteBlocks = normalizeEditorData(noteBlocks, note);
 
       const timerId = setTimeout(() => {
-        updateCapture(captureId, { note: note.trim() })
+        updateCapture(captureId, { note: note.trim(), noteBlocks: normalizedNoteBlocks })
           .then(() => {
             dirtyNoteIdsRef.current.delete(captureId);
             touchDocument();
@@ -183,7 +315,10 @@ export default function App() {
           return;
         }
 
-        await updateCapture(captureId, { note: (capture.note || "").trim() });
+        await updateCapture(captureId, {
+          note: (capture.note || "").trim(),
+          noteBlocks: normalizeEditorData(capture.noteBlocks, capture.note || "")
+        });
         dirtyNoteIdsRef.current.delete(captureId);
       })
     );
@@ -287,6 +422,8 @@ export default function App() {
       setEditorCaptureId(null);
       setEditorCaptureTitle("Edit Screenshot");
       setEditorNote("");
+      setEditorNoteBlocks(textToEditorData(""));
+      setEditorNoteEditorRevision((current) => current + 1);
       setModalBusy(false);
       setModalImageReady(false);
       setModalTool(TOOL_PEN);
@@ -323,6 +460,8 @@ export default function App() {
       setEditorCaptureId(capture.id);
       setEditorCaptureTitle(capture.title || "Untitled Page");
       setEditorNote(capture.note || "");
+      setEditorNoteBlocks(normalizeEditorData(capture.noteBlocks, capture.note || ""));
+      setEditorNoteEditorRevision((current) => current + 1);
       setModalBusy(false);
       setModalImageReady(false);
       setModalTool(TOOL_PEN);
@@ -350,21 +489,39 @@ export default function App() {
         }
 
         const normalizedTemplateId = normalizeTemplateId(meta.templateId);
+        const normalizedOverviewBlocks = normalizeEditorData(meta.overviewBlocks, meta.overview || "");
+        let normalizedCaptures = loadedCaptures.map((capture) => normalizeCaptureForEditor(capture));
+        const normalizedHiddenCaptureIds = normalizeHiddenCaptureIds(meta.hiddenCaptureIds, normalizedCaptures);
+        const initialWorkspaceBlocks = syncWorkspaceBlocksWithCaptures({
+          workspaceBlocks: normalizeEditorData(meta.workspaceBlocks, ""),
+          captures: normalizedCaptures,
+          overview: meta.overview || "",
+          hiddenCaptureIds: normalizedHiddenCaptureIds
+        });
+        const extractedWorkspace = extractWorkspaceSummaryAndNotes(initialWorkspaceBlocks);
+        normalizedCaptures = mergeCaptureNotesFromWorkspace(normalizedCaptures, extractedWorkspace.captureNotes);
 
         setDocTitle(meta.title || "");
-        setOverview(meta.overview || "");
+        setOverview(extractedWorkspace.overviewText || editorDataToPlainText(normalizedOverviewBlocks));
+        setOverviewBlocks(normalizedOverviewBlocks);
+        setWorkspaceBlocks(initialWorkspaceBlocks);
+        setHiddenCaptureIds(normalizedHiddenCaptureIds);
+        setWorkspaceEditorRevision((current) => current + 1);
         setSelectedTemplateId(normalizedTemplateId);
         setTemplateSelectionId(normalizedTemplateId);
+        setTemplateOverrides(meta.templateOverrides || {});
 
-        capturesRef.current = loadedCaptures;
-        setCaptures(loadedCaptures);
+        capturesRef.current = normalizedCaptures;
+        workspaceBlocksRef.current = initialWorkspaceBlocks;
+        hiddenCaptureIdsRef.current = normalizedHiddenCaptureIds;
+        setCaptures(normalizedCaptures);
         touchDocument();
 
         const url = new URL(window.location.href);
         const pendingEditCaptureId = url.searchParams.get("editCaptureId");
 
         if (pendingEditCaptureId) {
-          await openEditorModal(pendingEditCaptureId, loadedCaptures);
+          await openEditorModal(pendingEditCaptureId, normalizedCaptures);
           url.searchParams.delete("editCaptureId");
           window.history.replaceState({}, "", url.toString());
         }
@@ -385,6 +542,14 @@ export default function App() {
   }, [captures]);
 
   useEffect(() => {
+    workspaceBlocksRef.current = workspaceBlocks;
+  }, [workspaceBlocks]);
+
+  useEffect(() => {
+    hiddenCaptureIdsRef.current = hiddenCaptureIds;
+  }, [hiddenCaptureIds]);
+
+  useEffect(() => {
     const shouldLockScroll = editorOpen || templateModalOpen;
     document.body.classList.toggle("modal-open", shouldLockScroll);
 
@@ -392,6 +557,26 @@ export default function App() {
       document.body.classList.remove("modal-open");
     };
   }, [editorOpen, templateModalOpen]);
+
+  useEffect(() => {
+    if (!templateModalOpen) {
+      return;
+    }
+
+    syncTemplateEditorFromSelection(templateSelectionId, true).catch((error) => {
+      console.error(error);
+      setTemplateLoading(false);
+      setTemplatePreviewError(error?.message || "Failed to initialize template editor.");
+    });
+  }, [syncTemplateEditorFromSelection, templateModalOpen, templateSelectionId]);
+
+  useEffect(() => {
+    if (!templatePreviewError) {
+      return;
+    }
+
+    setTemplatePreviewError("");
+  }, [templateDocumentInput, templatePreviewError, templateSectionInput]);
 
   useEffect(() => {
     if (!editorOpen || !modalImageReady) {
@@ -452,20 +637,86 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const flushBeforeLeave = () => {
+      if (metaSaveTimerRef.current) {
+        clearTimeout(metaSaveTimerRef.current);
+        metaSaveTimerRef.current = null;
+      }
+
+      persistMetaNow({
+        workspaceBlocks: workspaceBlocksRef.current,
+        hiddenCaptureIds: hiddenCaptureIdsRef.current
+      }).catch((error) => console.error(error));
+
+      saveAllCurrentNotes().catch((error) => console.error(error));
+    };
+
+    window.addEventListener("pagehide", flushBeforeLeave);
+    window.addEventListener("beforeunload", flushBeforeLeave);
+
+    return () => {
+      window.removeEventListener("pagehide", flushBeforeLeave);
+      window.removeEventListener("beforeunload", flushBeforeLeave);
+    };
+  }, [persistMetaNow, saveAllCurrentNotes]);
+
   const handleDocTitleChange = (event) => {
     const value = event.target.value;
     setDocTitle(value);
     scheduleMetaSave({ title: value });
   };
 
-  const handleOverviewChange = (event) => {
-    const value = event.target.value;
-    setOverview(value);
-    scheduleMetaSave({ overview: value });
-  };
+  const handleWorkspaceEditorChange = (data) => {
+    const normalizedData = normalizeEditorData(data, "");
+    const extracted = extractWorkspaceSummaryAndNotes(normalizedData);
+    const attachedCaptureIds = collectAttachedCaptureIds(normalizedData);
+    const nextHiddenCaptureIds = buildHiddenCaptureIds({
+      captures: capturesRef.current,
+      attachedCaptureIds,
+      existingHiddenCaptureIds: hiddenCaptureIdsRef.current
+    });
 
-  const handleOverviewBlur = async () => {
-    await persistMetaNow();
+    setWorkspaceBlocks(normalizedData);
+    workspaceBlocksRef.current = normalizedData;
+    setHiddenCaptureIds(nextHiddenCaptureIds);
+    hiddenCaptureIdsRef.current = nextHiddenCaptureIds;
+
+    setOverview(extracted.overviewText);
+    setOverviewBlocks(textToEditorData(extracted.overviewText));
+
+    setCaptures((current) => {
+      const next = current.map((capture) => {
+        const noteFromWorkspace = extracted.captureNotes.get(capture.id);
+        if (typeof noteFromWorkspace !== "string") {
+          return capture;
+        }
+
+        const normalizedNote = noteFromWorkspace.trim();
+        if (normalizedNote === (capture.note || "").trim()) {
+          return capture;
+        }
+
+        const normalizedBlocks = textToEditorData(normalizedNote);
+        scheduleNoteSave(capture.id, normalizedNote, normalizedBlocks);
+
+        return {
+          ...capture,
+          note: normalizedNote,
+          noteBlocks: normalizedBlocks
+        };
+      });
+
+      capturesRef.current = next;
+      return next;
+    });
+
+    scheduleMetaSave({
+      overview: extracted.overviewText,
+      overviewBlocks: textToEditorData(extracted.overviewText),
+      workspaceBlocks: normalizedData,
+      hiddenCaptureIds: nextHiddenCaptureIds
+    });
   };
 
   const handleRefresh = async () => {
@@ -490,31 +741,22 @@ export default function App() {
     setTemplateModalOpen(false);
     setCaptures([]);
     capturesRef.current = [];
-    touchDocument();
-  };
-
-  const handleSectionNoteChange = (captureId, value) => {
-    setCaptures((current) => {
-      const next = current.map((capture) => {
-        if (capture.id !== captureId) {
-          return capture;
-        }
-
-        return {
-          ...capture,
-          note: value
-        };
-      });
-
-      capturesRef.current = next;
-      return next;
+    setHiddenCaptureIds([]);
+    hiddenCaptureIdsRef.current = [];
+    const emptyWorkspace = buildInitialWorkspaceBlocks("");
+    const emptyOverviewBlocks = textToEditorData("");
+    setOverview("");
+    setOverviewBlocks(emptyOverviewBlocks);
+    setWorkspaceBlocks(emptyWorkspace);
+    workspaceBlocksRef.current = emptyWorkspace;
+    setWorkspaceEditorRevision((current) => current + 1);
+    await persistMetaNow({
+      overview: "",
+      overviewBlocks: emptyOverviewBlocks,
+      workspaceBlocks: emptyWorkspace,
+      hiddenCaptureIds: []
     });
-
-    scheduleNoteSave(captureId, value);
-  };
-
-  const handleSectionNoteBlur = async (captureId, value) => {
-    await saveNoteImmediately(captureId, value);
+    touchDocument();
   };
 
   const handleDeleteCapture = async (captureId) => {
@@ -545,27 +787,6 @@ export default function App() {
 
     await reorderCaptures(orderedIds);
     await refreshCaptures();
-  };
-
-  const handleCardAction = async (action, captureId, index) => {
-    if (action === "edit-full") {
-      await openEditorModal(captureId);
-      return;
-    }
-
-    if (action === "delete") {
-      await handleDeleteCapture(captureId);
-      return;
-    }
-
-    if (action === "move-up") {
-      await handleMoveByIndex(index, "up");
-      return;
-    }
-
-    if (action === "move-down") {
-      await handleMoveByIndex(index, "down");
-    }
   };
 
   const reorderFromSidebarDrag = async (movingId, targetId, position) => {
@@ -600,21 +821,25 @@ export default function App() {
   };
 
   const handleSidebarItemClick = (captureId) => {
-    const card = sectionRefs.current.get(captureId);
-    card?.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
-
-  const registerSectionRef = (captureId, element) => {
-    if (element) {
-      sectionRefs.current.set(captureId, element);
-      return;
-    }
-
-    sectionRefs.current.delete(captureId);
+    openEditorModal(captureId).catch((error) => console.error(error));
   };
 
   const handleExportClick = async () => {
-    await persistMetaNow();
+    const currentWorkspace = normalizeEditorData(workspaceBlocksRef.current, "");
+    const attachedCaptureIds = collectAttachedCaptureIds(currentWorkspace);
+    const nextHiddenCaptureIds = buildHiddenCaptureIds({
+      captures: capturesRef.current,
+      attachedCaptureIds,
+      existingHiddenCaptureIds: hiddenCaptureIdsRef.current
+    });
+
+    setHiddenCaptureIds(nextHiddenCaptureIds);
+    hiddenCaptureIdsRef.current = nextHiddenCaptureIds;
+
+    await persistMetaNow({
+      workspaceBlocks: currentWorkspace,
+      hiddenCaptureIds: nextHiddenCaptureIds
+    });
     await saveAllCurrentNotes();
 
     setTemplateSelectionId(selectedTemplateId);
@@ -625,21 +850,76 @@ export default function App() {
     setTemplateModalOpen(false);
   };
 
-  const handlePreviewTemplate = async () => {
+  const buildTemplateOverridesPayload = useCallback(() => {
     const normalizedTemplateId = normalizeTemplateId(templateSelectionId);
+    return {
+      ...templateOverrides,
+      [normalizedTemplateId]: {
+        documentTemplate: templateDocumentInput,
+        sectionTemplate: templateSectionInput
+      }
+    };
+  }, [templateDocumentInput, templateOverrides, templateSectionInput, templateSelectionId]);
+
+  const saveCurrentTemplateOverrides = useCallback(async () => {
+    const normalizedTemplateId = normalizeTemplateId(templateSelectionId);
+    const nextTemplateOverrides = buildTemplateOverridesPayload();
+    setTemplateOverrides(nextTemplateOverrides);
     setSelectedTemplateId(normalizedTemplateId);
-    await persistMetaNow({ templateId: normalizedTemplateId });
+
+    await persistMetaNow({
+      templateId: normalizedTemplateId,
+      templateOverrides: nextTemplateOverrides
+    });
+
+    return { normalizedTemplateId, nextTemplateOverrides };
+  }, [buildTemplateOverridesPayload, persistMetaNow, templateSelectionId]);
+
+  const handleResetTemplateEdits = async () => {
+    const normalizedTemplateId = normalizeTemplateId(templateSelectionId);
+    const defaults = await getTemplateDefaults(normalizedTemplateId);
+
+    setTemplateDocumentInput(defaults.documentTemplate);
+    setTemplateSectionInput(defaults.sectionTemplate);
+    setTemplateDefaultDocument(defaults.documentTemplate);
+    setTemplateDefaultSection(defaults.sectionTemplate);
+
+    const nextTemplateOverrides = { ...templateOverrides };
+    delete nextTemplateOverrides[normalizedTemplateId];
+
+    setTemplateOverrides(nextTemplateOverrides);
+
+    await persistMetaNow({
+      templateOverrides: nextTemplateOverrides
+    });
+  };
+
+  const handleSaveTemplateEdits = async () => {
+    await saveCurrentTemplateOverrides();
+  };
+
+  const handlePreviewTemplate = async () => {
+    await saveCurrentTemplateOverrides();
     closeTemplateModal();
   };
 
   const handleExportWithTemplate = async () => {
-    const normalizedTemplateId = normalizeTemplateId(templateSelectionId);
-    setSelectedTemplateId(normalizedTemplateId);
-    await persistMetaNow({ templateId: normalizedTemplateId });
+    await saveCurrentTemplateOverrides();
     closeTemplateModal();
     await nextFrame();
-    await nextFrame();
-    window.print();
+
+    const { html, error } = templatePreviewResult;
+    if (error || !html.trim()) {
+      window.alert(error || "Template output is empty. Fix template syntax before export.");
+      return;
+    }
+
+    try {
+      await printHtmlWithHiddenIframe(html);
+    } catch (printError) {
+      console.error(printError);
+      window.alert("PDF export failed. Please try again.");
+    }
   };
 
   const getModalPoint = (event) => {
@@ -824,6 +1104,12 @@ export default function App() {
     return exportCanvas.toDataURL("image/png");
   };
 
+  const handleModalNoteEditorChange = (data) => {
+    const normalizedData = normalizeEditorData(data, "");
+    setEditorNoteBlocks(normalizedData);
+    setEditorNote(editorDataToPlainText(normalizedData));
+  };
+
   const saveModalChanges = async () => {
     if (!editorCaptureId || !modalImageReady || modalBusy) {
       return;
@@ -832,8 +1118,11 @@ export default function App() {
     setModalBusy(true);
 
     try {
+      const normalizedModalNoteBlocks = normalizeEditorData(editorNoteBlocks, editorNote);
+      const modalNoteText = editorDataToPlainText(normalizedModalNoteBlocks);
       const updates = {
-        note: editorNote.trim()
+        note: modalNoteText.trim(),
+        noteBlocks: normalizedModalNoteBlocks
       };
 
       if (modalShapesRef.current.length > 0) {
@@ -844,9 +1133,6 @@ export default function App() {
 
       closeEditorModal(true);
       await refreshCaptures();
-
-      const card = sectionRefs.current.get(editorCaptureId);
-      card?.scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (error) {
       console.error(error);
       window.alert(error?.message || "Failed to save screenshot changes.");
@@ -988,97 +1274,19 @@ export default function App() {
                 <p id="generatedMeta">{generatedMetaLabel}</p>
               </header>
 
-              <section className="intro-block">
-                <h3>Overview</h3>
-                <textarea
-                  id="introEditor"
-                  className="rich-note"
-                  placeholder="Write a short overview for this walkthrough..."
-                  value={overview}
-                  onChange={handleOverviewChange}
-                  onBlur={handleOverviewBlur}
+              <section className="workspace-editor-wrap">
+                <EditorJsField
+                  key={`workspace-editor-${workspaceEditorRevision}`}
+                  id="workspaceEditor"
+                  className="workspace-editor editorjs-surface"
+                  initialData={workspaceBlocks}
+                  placeholder="Start documenting this flow. New screenshots are added as image blocks."
+                  minHeight={720}
+                  onCaptureImageClick={(captureId) => {
+                    openEditorModal(captureId).catch((error) => console.error(error));
+                  }}
+                  onChange={handleWorkspaceEditorChange}
                 />
-              </section>
-
-              <section id="sectionsContainer">
-                {captures.length === 0 ? (
-                  <p style={{ color: "#58687a" }}>
-                    No captures yet. Use the extension sidebar to capture visible area, selected area, or full
-                    page.
-                  </p>
-                ) : (
-                  captures.map((capture, index) => (
-                    <article
-                      className="section-card"
-                      data-capture-id={capture.id}
-                      key={capture.id}
-                      ref={(element) => registerSectionRef(capture.id, element)}
-                    >
-                      <div className="section-header">
-                        <div className="section-meta">
-                          <span className="capture-badge">{captureTypeLabel(capture.captureType)}</span>
-                          <a className="page-link" href={capture.url || "#"} target="_blank" rel="noreferrer">
-                            {capture.url || capture.title || "Page"}
-                          </a>
-                          <span className="time-stamp">{new Date(capture.createdAt).toLocaleString()}</span>
-                        </div>
-
-                        <div className="section-actions">
-                          <button
-                            data-action="edit-full"
-                            className="primary tiny"
-                            type="button"
-                            onClick={() => handleCardAction("edit-full", capture.id, index)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            data-action="move-up"
-                            className="ghost tiny"
-                            type="button"
-                            onClick={() => handleCardAction("move-up", capture.id, index)}
-                          >
-                            Up
-                          </button>
-                          <button
-                            data-action="move-down"
-                            className="ghost tiny"
-                            type="button"
-                            onClick={() => handleCardAction("move-down", capture.id, index)}
-                          >
-                            Down
-                          </button>
-                          <button
-                            data-action="delete"
-                            className="danger tiny"
-                            type="button"
-                            onClick={() => handleCardAction("delete", capture.id, index)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-
-                      <img
-                        className="capture-image"
-                        src={capture.imageData}
-                        alt="Captured page segment"
-                        onClick={() => openEditorModal(capture.id).catch((error) => console.error(error))}
-                      />
-
-                      <h4>Documentation Notes</h4>
-                      <textarea
-                        className="rich-note section-note"
-                        value={capture.note || ""}
-                        placeholder="Add documentation for this screenshot..."
-                        onChange={(event) => handleSectionNoteChange(capture.id, event.target.value)}
-                        onBlur={(event) =>
-                          handleSectionNoteBlur(capture.id, event.target.value).catch((error) => console.error(error))
-                        }
-                      />
-                    </article>
-                  ))
-                )}
               </section>
             </article>
           </section>
@@ -1208,13 +1416,15 @@ export default function App() {
           <label className="modal-note-label" htmlFor="modalNoteInput">
             Documentation Note
           </label>
-          <textarea
+          <EditorJsField
+            key={`modal-note-${editorCaptureId || "none"}-${editorNoteEditorRevision}`}
             id="modalNoteInput"
-            className="modal-note-input"
+            className="modal-note-input editorjs-surface modal-editor-note"
+            initialData={editorNoteBlocks}
             placeholder="Write documentation for this screen..."
-            disabled={modalBusy || !modalImageReady}
-            value={editorNote}
-            onChange={(event) => setEditorNote(event.target.value)}
+            minHeight={130}
+            allowImageBlocks={false}
+            onChange={handleModalNoteEditorChange}
           />
 
           <footer className="editor-modal-footer">
@@ -1296,22 +1506,97 @@ export default function App() {
                 <p className="template-hint">
                   Template Guide: <code>templates/TEMPLATE_GUIDE.md</code>
                 </p>
+                <p className="template-hint">
+                  Loop support: <code>{TEMPLATE_LOOP_START}</code> ... <code>{TEMPLATE_LOOP_END}</code>
+                </p>
               </div>
 
               <div className="template-preview-shell">
                 <div id="templatePreviewContent">
-                  <TemplatePreviewPaper
-                    title={docTitle.trim() || "Untitled Documentation"}
-                    overview={overview}
-                    captures={captures}
-                    templateClassName={templateForModal.className}
-                  />
+                  {templateLoading ? (
+                    <p className="template-hint">Loading template files...</p>
+                  ) : (
+                    <iframe
+                      title="Template HTML Preview"
+                      className="template-preview-frame"
+                      srcDoc={templatePreviewResult.html}
+                    />
+                  )}
                 </div>
+              </div>
+
+              {templatePreviewError || templatePreviewResult.error ? (
+                <div className="template-render-error">
+                  {templatePreviewError || templatePreviewResult.error}
+                </div>
+              ) : null}
+
+              <div className="template-editor-grid">
+                <label className="template-editor-card" htmlFor="templateDocumentInput">
+                  <span>Document HTML Template</span>
+                  <textarea
+                    id="templateDocumentInput"
+                    className="template-editor-textarea"
+                    value={templateDocumentInput}
+                    onChange={(event) => setTemplateDocumentInput(event.target.value)}
+                    spellCheck={false}
+                  />
+                </label>
+
+                <label className="template-editor-card" htmlFor="templateSectionInput">
+                  <span>Section HTML Template (for each capture)</span>
+                  <textarea
+                    id="templateSectionInput"
+                    className="template-editor-textarea"
+                    value={templateSectionInput}
+                    onChange={(event) => setTemplateSectionInput(event.target.value)}
+                    spellCheck={false}
+                  />
+                </label>
+              </div>
+
+              <div className="template-variable-row">
+                {TEMPLATE_VARIABLES.map((variableToken) => (
+                  <span key={variableToken} className="template-variable-chip">
+                    {variableToken}
+                  </span>
+                ))}
+              </div>
+
+              <div className="template-meta-row">
+                <span className="template-hint">
+                  Source document: <code>{templateForModal.baseHtmlFile}</code>
+                </span>
+                <span className="template-hint">
+                  Source section: <code>{templateForModal.sectionHtmlFile || DEFAULT_SECTION_TEMPLATE_FILE}</code>
+                </span>
+                <span className="template-hint">
+                  Default document length: {templateDefaultDocument.length} chars
+                </span>
+                <span className="template-hint">
+                  Default section length: {templateDefaultSection.length} chars
+                </span>
               </div>
             </section>
           </div>
 
           <footer className="template-footer">
+            <button
+              className="ghost"
+              type="button"
+              disabled={templateLoading}
+              onClick={() => handleResetTemplateEdits().catch((error) => console.error(error))}
+            >
+              Reset To Example
+            </button>
+            <button
+              className="ghost"
+              type="button"
+              disabled={templateLoading}
+              onClick={() => handleSaveTemplateEdits().catch((error) => console.error(error))}
+            >
+              Save Template
+            </button>
             <button id="templatePreviewBtn" className="ghost" type="button" onClick={handlePreviewTemplate}>
               Preview On Page
             </button>
@@ -1325,45 +1610,607 @@ export default function App() {
   );
 }
 
-function TemplatePreviewPaper({ title, overview, captures, templateClassName }) {
-  return (
-    <article className={`paper template-preview-paper ${templateClassName}`}>
-      <header className="paper-header">
-        <h1>{title}</h1>
-        <p>{`Preview generated ${new Date().toLocaleString()}`}</p>
-      </header>
+async function loadTemplateText(templatePath) {
+  const response = await fetch(templatePath);
+  if (!response.ok) {
+    throw new Error(`Failed to load template file: ${templatePath}`);
+  }
 
-      <section className="intro-block">
-        <h3>Overview</h3>
-        <div className="rich-note preview-note">{overview || "No overview provided yet."}</div>
-      </section>
+  return response.text();
+}
 
-      <section id="sectionsContainer">
-        {captures.length === 0 ? (
-          <p style={{ color: "#58687a" }}>No captures in workspace yet.</p>
-        ) : (
-          captures.map((capture) => (
-            <article className="section-card" key={`preview-${capture.id}`}>
-              <div className="section-header">
-                <div className="section-meta">
-                  <span className="capture-badge">{captureTypeLabel(capture.captureType)}</span>
-                  <span className="page-link">{capture.url || capture.title || "Page"}</span>
-                  <span className="time-stamp">{new Date(capture.createdAt).toLocaleString()}</span>
-                </div>
-              </div>
+function normalizeCaptureForEditor(capture) {
+  const noteBlocks = normalizeEditorData(capture.noteBlocks, capture.note || "");
+  return {
+    ...capture,
+    note: editorDataToPlainText(noteBlocks),
+    noteBlocks
+  };
+}
 
-              <img className="capture-image" src={capture.imageData} alt="Captured page segment" />
+function normalizeHiddenCaptureIds(rawHiddenCaptureIds, captures = []) {
+  const allowedIds = new Set(captures.map((capture) => capture.id));
+  const rawList = Array.isArray(rawHiddenCaptureIds) ? rawHiddenCaptureIds : [];
+  const hiddenSet = new Set();
 
-              <h4>Documentation Notes</h4>
-              <div className="rich-note preview-note">
-                {capture.note || "No note written for this screenshot yet."}
-              </div>
-            </article>
-          ))
-        )}
-      </section>
-    </article>
+  for (const rawId of rawList) {
+    const captureId = String(rawId || "").trim();
+    if (!captureId) {
+      continue;
+    }
+
+    if (allowedIds.size > 0 && !allowedIds.has(captureId)) {
+      continue;
+    }
+
+    hiddenSet.add(captureId);
+  }
+
+  return Array.from(hiddenSet);
+}
+
+function collectAttachedCaptureIds(workspaceBlocks) {
+  const normalizedWorkspaceData = normalizeEditorData(workspaceBlocks, "");
+  const attachedIds = new Set();
+
+  for (const block of normalizedWorkspaceData.blocks || []) {
+    if (block?.type !== "image") {
+      continue;
+    }
+
+    const captureId = parseCaptureIdFromCaption(block?.data?.caption || "");
+    if (captureId) {
+      attachedIds.add(captureId);
+    }
+  }
+
+  return attachedIds;
+}
+
+function buildHiddenCaptureIds({ captures, attachedCaptureIds, existingHiddenCaptureIds }) {
+  const hiddenSet = new Set(normalizeHiddenCaptureIds(existingHiddenCaptureIds, captures));
+
+  for (const capture of captures) {
+    if (attachedCaptureIds.has(capture.id)) {
+      hiddenSet.delete(capture.id);
+      continue;
+    }
+
+    hiddenSet.add(capture.id);
+  }
+
+  return Array.from(hiddenSet);
+}
+
+function serializeWorkspaceBlocks(workspaceBlocks) {
+  const normalizedWorkspaceData = normalizeEditorData(workspaceBlocks, "");
+  const blocks = (normalizedWorkspaceData.blocks || []).map((block) => {
+    const nextBlock = {
+      ...block,
+      data: { ...(block.data || {}) }
+    };
+
+    if (nextBlock.type === "image") {
+      const captureId = parseCaptureIdFromCaption(nextBlock.data?.caption || "");
+      if (captureId) {
+        nextBlock.data.file = {
+          ...((nextBlock.data && nextBlock.data.file) || {}),
+          url: ""
+        };
+      }
+    }
+
+    return nextBlock;
+  });
+
+  return {
+    ...normalizedWorkspaceData,
+    blocks
+  };
+}
+
+function buildExportCapturesFromWorkspace(captures, workspaceBlocks, hiddenCaptureIds) {
+  const hiddenSet = new Set(normalizeHiddenCaptureIds(hiddenCaptureIds, captures));
+  const captureMap = new Map(captures.map((capture) => [capture.id, capture]));
+  const normalizedWorkspaceData = normalizeEditorData(workspaceBlocks, "");
+  const orderedIds = [];
+  const seenIds = new Set();
+
+  for (const block of normalizedWorkspaceData.blocks || []) {
+    if (block?.type !== "image") {
+      continue;
+    }
+
+    const captureId = parseCaptureIdFromCaption(block?.data?.caption || "");
+    if (!captureId || seenIds.has(captureId) || hiddenSet.has(captureId)) {
+      continue;
+    }
+
+    if (!captureMap.has(captureId)) {
+      continue;
+    }
+
+    orderedIds.push(captureId);
+    seenIds.add(captureId);
+  }
+
+  for (const capture of captures) {
+    if (hiddenSet.has(capture.id) || seenIds.has(capture.id)) {
+      continue;
+    }
+
+    orderedIds.push(capture.id);
+    seenIds.add(capture.id);
+  }
+
+  return orderedIds
+    .map((captureId) => captureMap.get(captureId))
+    .filter(Boolean);
+}
+
+function buildInitialWorkspaceBlocks(overview) {
+  const baseBlocks = [
+    {
+      type: "paragraph",
+      data: {
+        text: "<b>Overview</b>"
+      }
+    },
+    {
+      type: "paragraph",
+      data: {
+        text: escapeHtml(overview || "").replace(/\n/g, "<br />")
+      }
+    }
+  ];
+
+  return { blocks: baseBlocks };
+}
+
+function createCaptureMarker(captureId) {
+  return `${CAPTURE_MARKER_PREFIX}${captureId}]`;
+}
+
+function parseCaptureIdFromCaption(caption) {
+  const rawCaption = String(caption || "");
+  const match = CAPTURE_MARKER_REGEX.exec(rawCaption);
+  return match?.[1] || null;
+}
+
+function buildCaptureImageCaption(capture, existingCaption = "") {
+  const marker = createCaptureMarker(capture.id);
+  const titlePart = (capture.title || "").trim();
+  const cleanedCaption = String(existingCaption || "").replace(CAPTURE_MARKER_REGEX, "").trim();
+  const suffix = cleanedCaption || titlePart;
+  return suffix ? `${marker} ${suffix}` : marker;
+}
+
+function buildCaptureEditorBlocks(capture) {
+  const metadata = [
+    captureTypeLabel(capture.captureType),
+    capture.url || capture.title || "Page",
+    formatDateTime(capture.createdAt)
+  ]
+    .map((value) => escapeHtml(value || ""))
+    .join(" • ");
+
+  return [
+    {
+      type: "paragraph",
+      data: {
+        text: `<b>${metadata}</b>`
+      }
+    },
+    {
+      type: "image",
+      data: {
+        file: { url: capture.imageData || "" },
+        caption: buildCaptureImageCaption(capture),
+        withBorder: false,
+        withBackground: false,
+        stretched: false
+      }
+    },
+    {
+      type: "paragraph",
+      data: {
+        text: escapeHtml(capture.note || "").replace(/\n/g, "<br />")
+      }
+    }
+  ];
+}
+
+function syncWorkspaceBlocksWithCaptures({ workspaceBlocks, captures, overview, hiddenCaptureIds = [] }) {
+  const normalizedWorkspaceData = normalizeEditorData(workspaceBlocks, "");
+  const hiddenSet = new Set(normalizeHiddenCaptureIds(hiddenCaptureIds, captures));
+  const baseBlocks = Array.isArray(normalizedWorkspaceData.blocks)
+    ? normalizedWorkspaceData.blocks.map((block) => {
+        const nextBlock = { ...block, data: { ...(block.data || {}) } };
+        if (nextBlock.data.file && typeof nextBlock.data.file === "object") {
+          nextBlock.data.file = { ...nextBlock.data.file };
+        }
+        return nextBlock;
+      })
+    : [];
+
+  const capturesById = new Map(captures.map((capture) => [capture.id, capture]));
+  const attachedCaptureIds = new Set();
+  const keptBlocks = [];
+
+  for (const block of baseBlocks) {
+    if (block.type === "image") {
+      const captureId = parseCaptureIdFromCaption(block.data?.caption || "");
+
+      if (captureId) {
+        const capture = capturesById.get(captureId);
+        if (!capture) {
+          continue;
+        }
+
+        if (hiddenSet.has(captureId)) {
+          continue;
+        }
+
+        attachedCaptureIds.add(captureId);
+        keptBlocks.push({
+          ...block,
+          data: {
+            ...(block.data || {}),
+            file: {
+              ...((block.data && block.data.file) || {}),
+              url: capture.imageData || ""
+            },
+            caption: buildCaptureImageCaption(capture, block.data?.caption || "")
+          }
+        });
+        continue;
+      }
+    }
+
+    keptBlocks.push(block);
+  }
+
+  let nextBlocks = keptBlocks;
+
+  if (nextBlocks.length === 0) {
+    nextBlocks = buildInitialWorkspaceBlocks(overview || "").blocks;
+  }
+
+  for (const capture of captures) {
+    if (attachedCaptureIds.has(capture.id) || hiddenSet.has(capture.id)) {
+      continue;
+    }
+
+    nextBlocks.push(...buildCaptureEditorBlocks(capture));
+  }
+
+  return {
+    ...normalizedWorkspaceData,
+    blocks: nextBlocks
+  };
+}
+
+function extractWorkspaceSummaryAndNotes(workspaceBlocks) {
+  const normalizedWorkspaceData = normalizeEditorData(workspaceBlocks, "");
+  const blocks = Array.isArray(normalizedWorkspaceData.blocks) ? normalizedWorkspaceData.blocks : [];
+  const captureNotes = new Map();
+
+  let firstCaptureImageIndex = blocks.length;
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const isCaptureImage = block.type === "image" && Boolean(parseCaptureIdFromCaption(block.data?.caption || ""));
+    if (isCaptureImage) {
+      firstCaptureImageIndex = index;
+      break;
+    }
+  }
+
+  const overviewTextParts = [];
+  for (let index = 0; index < firstCaptureImageIndex; index += 1) {
+    const text = editorDataToPlainText({ blocks: [blocks[index]] });
+    if (text) {
+      overviewTextParts.push(text);
+    }
+  }
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (block.type !== "image") {
+      continue;
+    }
+
+    const captureId = parseCaptureIdFromCaption(block.data?.caption || "");
+    if (!captureId) {
+      continue;
+    }
+
+    const noteParts = [];
+    for (let nextIndex = index + 1; nextIndex < blocks.length; nextIndex += 1) {
+      const nextBlock = blocks[nextIndex];
+
+      if (nextBlock.type === "image" && parseCaptureIdFromCaption(nextBlock.data?.caption || "")) {
+        break;
+      }
+
+      const candidateText = editorDataToPlainText({ blocks: [nextBlock] });
+      if (candidateText) {
+        noteParts.push(candidateText);
+      }
+    }
+
+    captureNotes.set(captureId, noteParts.join("\n\n").trim());
+  }
+
+  const combinedOverviewText = overviewTextParts.join("\n\n").trim();
+  return {
+    overviewText: combinedOverviewText,
+    captureNotes
+  };
+}
+
+function mergeCaptureNotesFromWorkspace(captures, captureNotes) {
+  if (!captureNotes || captureNotes.size === 0) {
+    return captures;
+  }
+
+  return captures.map((capture) => {
+    if (!captureNotes.has(capture.id)) {
+      return capture;
+    }
+
+    const nextNote = String(captureNotes.get(capture.id) || "").trim();
+    return {
+      ...capture,
+      note: nextNote,
+      noteBlocks: textToEditorData(nextNote)
+    };
+  });
+}
+
+function printHtmlWithHiddenIframe(html) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.setAttribute("tabindex", "-1");
+
+    const cleanup = () => {
+      iframe.remove();
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error("Failed to open in-page print frame."));
+    };
+
+    iframe.onload = () => {
+      const frameWindow = iframe.contentWindow;
+      if (!frameWindow) {
+        onError();
+        return;
+      }
+
+      let completed = false;
+      const finalize = () => {
+        if (completed) {
+          return;
+        }
+        completed = true;
+        cleanup();
+        resolve();
+      };
+
+      frameWindow.addEventListener("afterprint", finalize, { once: true });
+
+      window.setTimeout(() => {
+        finalize();
+      }, 1800);
+
+      window.setTimeout(() => {
+        try {
+          frameWindow.focus();
+          frameWindow.print();
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+      }, 120);
+    };
+
+    iframe.onerror = onError;
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument;
+    if (!doc) {
+      onError();
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+  });
+}
+
+function renderDocumentationTemplate({ documentTemplate, sectionTemplate, title, overview, captures }) {
+  if (!documentTemplate || !documentTemplate.trim()) {
+    throw new Error("Document template is empty.");
+  }
+
+  const generatedAt = formatDateTime(Date.now());
+  const globalVariables = {
+    DOCUMENT_TITLE: escapeHtml(title || "Untitled Documentation"),
+    GENERATED_AT: escapeHtml(generatedAt),
+    OVERVIEW: textToHtml(overview || ""),
+    OVERVIEW_TEXT: escapeHtml(overview || ""),
+    SECTION_COUNT: String(captures.length)
+  };
+
+  const sectionVariables = captures.map((capture, index) =>
+    buildSectionTemplateVariables(capture, index, globalVariables)
   );
+
+  const safeSectionTemplate = sectionTemplate?.trim()
+    ? sectionTemplate
+    : `<article class=\"section\"><h4>Section {{INDEX}}</h4><img class=\"section-image\" src=\"{{IMAGE_DATA}}\" alt=\"Capture {{INDEX}}\" /><div class=\"section-note\">{{NOTE}}</div></article>`;
+
+  const sectionsHtml = sectionVariables
+    .map((item) => replaceTemplateTokens(safeSectionTemplate, item))
+    .join("\n");
+
+  const documentWithLoop = documentTemplate.replace(
+    /{{#SECTIONS}}([\s\S]*?){{\/SECTIONS}}/g,
+    (_, loopTemplate) =>
+      sectionVariables.map((item) => replaceTemplateTokens(loopTemplate, item)).join("\n")
+  );
+
+  const renderedHtml = replaceTemplateTokens(documentWithLoop, {
+    ...globalVariables,
+    SECTIONS_HTML: sectionsHtml
+  });
+
+  return injectExportSafetyStyles(renderedHtml);
+}
+
+function injectExportSafetyStyles(html) {
+  const safetyStyle = `
+<style id="quilldock-export-safety">
+  * { box-sizing: border-box; }
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  img {
+    display: block;
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  .section,
+  .section-card,
+  article {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .section-image,
+  .capture-image,
+  .section img,
+  article img {
+    margin: 10px 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    object-fit: contain !important;
+    object-position: top left !important;
+  }
+  .section-url,
+  .page-link {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  @page {
+    size: auto;
+    margin: 0;
+  }
+  @media print {
+    html,
+    body {
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .paper,
+    .doc,
+    .letter,
+    .template-preview-paper,
+    main,
+    article {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+
+    .section-image,
+    .capture-image,
+    .section img,
+    article img {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      max-height: none !important;
+      margin: 10px 0 !important;
+      object-fit: contain !important;
+      object-position: top left !important;
+    }
+  }
+</style>`;
+
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${safetyStyle}</head>`);
+  }
+
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/<body([^>]*)>/i, `<body$1>${safetyStyle}`);
+  }
+
+  return `<!doctype html><html><head>${safetyStyle}</head><body>${html}</body></html>`;
+}
+
+function buildSectionTemplateVariables(capture, index, globalVariables) {
+  return {
+    ...globalVariables,
+    INDEX: String(index + 1),
+    CAPTURE_ID: escapeHtml(capture.id || ""),
+    CAPTURE_TYPE: escapeHtml(captureTypeLabel(capture.captureType)),
+    CAPTURE_TYPE_RAW: escapeHtml(capture.captureType || ""),
+    PAGE_TITLE: escapeHtml(capture.title || ""),
+    PAGE_URL: escapeHtml(capture.url || ""),
+    TIMESTAMP: escapeHtml(formatDateTime(capture.createdAt)),
+    UPDATED_AT: escapeHtml(formatDateTime(capture.updatedAt || capture.createdAt)),
+    NOTE: textToHtml(capture.note || ""),
+    NOTE_TEXT: escapeHtml(capture.note || ""),
+    IMAGE_DATA: capture.imageData || ""
+  };
+}
+
+function replaceTemplateTokens(templateText, variables) {
+  return templateText.replace(/{{\s*([A-Z0-9_]+)\s*}}/g, (_, key) => variables[key] ?? "");
+}
+
+function escapeHtml(value) {
+  const text = String(value ?? "");
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function textToHtml(value) {
+  return escapeHtml(value).replace(/\n/g, "<br />");
+}
+
+function formatDateTime(value) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "";
+  }
+
+  return new Date(timestamp).toLocaleString();
 }
 
 function drawShape(ctx, shape, scale) {

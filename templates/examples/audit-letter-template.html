@@ -79,6 +79,42 @@
         background: #fffdf8;
         padding: 10px;
       }
+
+      @media print {
+        @page {
+          size: auto;
+          margin: 0;
+        }
+
+        body {
+          background: #ffffff;
+          margin: 0;
+          padding: 0;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .letter {
+          box-shadow: none;
+          width: 100%;
+          max-width: 100%;
+          margin: 0;
+          border-radius: 0;
+        }
+
+        .section {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+
+        .section img {
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: none !important;
+          object-position: top left;
+        }
+      }
     </style>
   </head>
   <body>
