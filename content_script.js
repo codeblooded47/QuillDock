@@ -36,8 +36,8 @@
       renderHeight: 0,
       shapes: [],
       activeShape: null,
-      pointerId: null
-    }
+      pointerId: null,
+    },
   };
 
   const refs = {
@@ -71,7 +71,7 @@
     modalNoteInput: null,
     modalDiscardBtn: null,
     modalSaveBtn: null,
-    modalCanvasCtx: null
+    modalCanvasCtx: null,
   };
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -92,7 +92,7 @@
         .catch((error) => {
           sendResponse({
             ok: false,
-            error: error?.message || "Selection canceled."
+            error: error?.message || "Selection canceled.",
           });
         })
         .finally(() => {
@@ -575,7 +575,9 @@
         }
       </style>
 
-      <button id="launcherBtn" class="launcher" type="button" title="Open QuillDock">DOC</button>
+      <button id="launcherBtn" class="launcher" type="button" title="Open QuillDock">
+        <img src="${chrome.runtime.getURL("icons/icon48.png")}" alt="QuillDock" style="width: 24px; height: 24px; display: block;" />
+      </button>
 
       <aside id="panel" class="panel" aria-label="QuillDock sidebar">
         <header class="panel-header">
@@ -665,7 +667,9 @@
     refs.panel = refs.shadow.getElementById("panel");
     refs.closePanelBtn = refs.shadow.getElementById("closePanelBtn");
     refs.captureVisibleBtn = refs.shadow.getElementById("captureVisibleBtn");
-    refs.captureSelectionBtn = refs.shadow.getElementById("captureSelectionBtn");
+    refs.captureSelectionBtn = refs.shadow.getElementById(
+      "captureSelectionBtn",
+    );
     refs.captureFullBtn = refs.shadow.getElementById("captureFullBtn");
     refs.openReviewBtn = refs.shadow.getElementById("openReviewBtn");
     refs.statusText = refs.shadow.getElementById("statusText");
@@ -681,8 +685,12 @@
     refs.modalRectBtn = refs.shadow.getElementById("modalRectBtn");
     refs.modalArrowBtn = refs.shadow.getElementById("modalArrowBtn");
     refs.modalTextBtn = refs.shadow.getElementById("modalTextBtn");
-    refs.modalStrokeColorInput = refs.shadow.getElementById("modalStrokeColorInput");
-    refs.modalStrokeWidthInput = refs.shadow.getElementById("modalStrokeWidthInput");
+    refs.modalStrokeColorInput = refs.shadow.getElementById(
+      "modalStrokeColorInput",
+    );
+    refs.modalStrokeWidthInput = refs.shadow.getElementById(
+      "modalStrokeWidthInput",
+    );
     refs.modalUndoBtn = refs.shadow.getElementById("modalUndoBtn");
     refs.modalClearBtn = refs.shadow.getElementById("modalClearBtn");
     refs.modalCanvasWrap = refs.shadow.getElementById("modalCanvasWrap");
@@ -744,7 +752,9 @@
 
     refs.modalPenBtn.addEventListener("click", () => setModalTool(TOOL_PEN));
     refs.modalRectBtn.addEventListener("click", () => setModalTool(TOOL_RECT));
-    refs.modalArrowBtn.addEventListener("click", () => setModalTool(TOOL_ARROW));
+    refs.modalArrowBtn.addEventListener("click", () =>
+      setModalTool(TOOL_ARROW),
+    );
     refs.modalTextBtn.addEventListener("click", () => setModalTool(TOOL_TEXT));
 
     refs.modalUndoBtn.addEventListener("click", undoModalShape);
@@ -794,7 +804,11 @@
       await openCaptureEditor(response.capture.id, true);
       setStatus("Capture ready. Save or discard from modal.", false);
     } catch (error) {
-      if (String(error?.message || "").toLowerCase().includes("canceled")) {
+      if (
+        String(error?.message || "")
+          .toLowerCase()
+          .includes("canceled")
+      ) {
         setStatus("Capture canceled.", false);
       } else {
         throw error;
@@ -806,13 +820,18 @@
 
   async function refreshCaptures({ selectCaptureId = null } = {}) {
     const response = await requestBackground({ type: "get-captures" });
-    const sorted = [...(response.captures || [])].sort((a, b) => b.createdAt - a.createdAt);
+    const sorted = [...(response.captures || [])].sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
 
     state.captures = sorted;
 
     if (sorted.length === 0) {
       state.selectedCaptureId = null;
-    } else if (selectCaptureId && sorted.some((capture) => capture.id === selectCaptureId)) {
+    } else if (
+      selectCaptureId &&
+      sorted.some((capture) => capture.id === selectCaptureId)
+    ) {
       state.selectedCaptureId = selectCaptureId;
     } else if (
       state.selectedCaptureId &&
@@ -850,12 +869,14 @@
       const meta = document.createElement("div");
       meta.className = "capture-meta";
       meta.textContent = `${formatCaptureType(capture.captureType)} • ${new Date(
-        capture.createdAt
+        capture.createdAt,
       ).toLocaleString()}`;
 
       const note = document.createElement("div");
       note.className = "capture-meta";
-      note.textContent = capture.note ? capture.note.replace(/\s+/g, " ").trim().slice(0, 80) : "No notes";
+      note.textContent = capture.note
+        ? capture.note.replace(/\s+/g, " ").trim().slice(0, 80)
+        : "No notes";
 
       li.append(thumb, title, meta, note);
       li.addEventListener("click", () => {
@@ -867,7 +888,8 @@
       refs.captureList.appendChild(li);
     }
 
-    refs.emptyList.style.display = state.captures.length === 0 ? "block" : "none";
+    refs.emptyList.style.display =
+      state.captures.length === 0 ? "block" : "none";
     refs.captureCount.textContent = `${state.captures.length} capture${
       state.captures.length === 1 ? "" : "s"
     }`;
@@ -892,12 +914,18 @@
     state.modal.pointerId = null;
     state.modal.busy = false;
 
-    refs.modalTitle.textContent = isDraftCapture ? "Review New Capture" : "Edit Capture";
+    refs.modalTitle.textContent = isDraftCapture
+      ? "Review New Capture"
+      : "Edit Capture";
     refs.modalHint.textContent = isDraftCapture
       ? "Annotate and add notes now. Save to workspace or discard."
       : "Update your screenshot annotations and notes.";
-    refs.modalSaveBtn.textContent = isDraftCapture ? "Save To Workspace" : "Save Changes";
-    refs.modalDiscardBtn.textContent = isDraftCapture ? "Discard Capture" : "Discard Changes";
+    refs.modalSaveBtn.textContent = isDraftCapture
+      ? "Save To Workspace"
+      : "Save Changes";
+    refs.modalDiscardBtn.textContent = isDraftCapture
+      ? "Discard Capture"
+      : "Discard Changes";
 
     refs.modalNoteInput.value = state.modal.originalNote;
 
@@ -942,7 +970,10 @@
     setModalBusy(true);
 
     try {
-      await requestBackground({ type: "delete-capture", id: state.modal.captureId });
+      await requestBackground({
+        type: "delete-capture",
+        id: state.modal.captureId,
+      });
       closeModalState();
       await refreshCaptures();
       setStatus("Capture discarded.", false);
@@ -969,7 +1000,7 @@
       await requestBackground({
         type: "update-capture",
         id: state.modal.captureId,
-        updates
+        updates,
       });
 
       const savedId = state.modal.captureId;
@@ -1010,7 +1041,7 @@
   async function openReviewWorkspace() {
     await requestBackground({
       type: "open-review-page",
-      captureId: state.selectedCaptureId
+      captureId: state.selectedCaptureId,
     });
   }
 
@@ -1039,7 +1070,8 @@
     refs.captureVisibleBtn.disabled = state.busy || state.modal.busy;
     refs.captureSelectionBtn.disabled = state.busy || state.modal.busy;
     refs.captureFullBtn.disabled = state.busy || state.modal.busy;
-    refs.openReviewBtn.disabled = state.busy || state.modal.busy || !hasCaptures;
+    refs.openReviewBtn.disabled =
+      state.busy || state.modal.busy || !hasCaptures;
 
     refs.modalCloseBtn.disabled = state.modal.busy;
     refs.modalDiscardBtn.disabled = state.modal.busy;
@@ -1052,10 +1084,13 @@
     refs.modalTextBtn.disabled = state.modal.busy || !modalHasImage;
     refs.modalStrokeColorInput.disabled = state.modal.busy || !modalHasImage;
     refs.modalStrokeWidthInput.disabled = state.modal.busy || !modalHasImage;
-    refs.modalUndoBtn.disabled = state.modal.busy || !modalHasImage || state.modal.shapes.length === 0;
-    refs.modalClearBtn.disabled = state.modal.busy || !modalHasImage || state.modal.shapes.length === 0;
+    refs.modalUndoBtn.disabled =
+      state.modal.busy || !modalHasImage || state.modal.shapes.length === 0;
+    refs.modalClearBtn.disabled =
+      state.modal.busy || !modalHasImage || state.modal.shapes.length === 0;
 
-    refs.modalCanvas.style.pointerEvents = state.modal.busy || !modalHasImage ? "none" : "auto";
+    refs.modalCanvas.style.pointerEvents =
+      state.modal.busy || !modalHasImage ? "none" : "auto";
   }
 
   function setStatus(text, isError) {
@@ -1108,7 +1143,7 @@
   function getModalStyle() {
     return {
       color: refs.modalStrokeColorInput.value || "#ff0000",
-      width: Number(refs.modalStrokeWidthInput.value) || 3
+      width: Number(refs.modalStrokeWidthInput.value) || 3,
     };
   }
 
@@ -1131,7 +1166,7 @@
           width: style.width,
           text,
           x: point.x,
-          y: point.y
+          y: point.y,
         });
         redrawModalCanvas();
         updateControlState();
@@ -1148,7 +1183,7 @@
         type: TOOL_PEN,
         color: style.color,
         width: style.width,
-        points: [point]
+        points: [point],
       };
     } else {
       state.modal.activeShape = {
@@ -1156,7 +1191,7 @@
         color: style.color,
         width: style.width,
         start: point,
-        end: point
+        end: point,
       };
     }
 
@@ -1172,7 +1207,10 @@
 
     const point = getModalPoint(event);
     if (state.modal.activeShape.type === TOOL_PEN) {
-      const last = state.modal.activeShape.points[state.modal.activeShape.points.length - 1];
+      const last =
+        state.modal.activeShape.points[
+          state.modal.activeShape.points.length - 1
+        ];
       if (!last || distance(last, point) >= 1.2) {
         state.modal.activeShape.points.push(point);
       }
@@ -1190,7 +1228,10 @@
 
     const point = getModalPoint(event);
     if (state.modal.activeShape.type === TOOL_PEN) {
-      const last = state.modal.activeShape.points[state.modal.activeShape.points.length - 1];
+      const last =
+        state.modal.activeShape.points[
+          state.modal.activeShape.points.length - 1
+        ];
       if (!last || distance(last, point) >= 1.2) {
         state.modal.activeShape.points.push(point);
       }
@@ -1252,9 +1293,19 @@
     }
 
     const maxWidth = Math.max(320, refs.modalCanvasWrap.clientWidth - 16);
-    const maxHeight = Math.max(240, Math.min(window.innerHeight * 0.56, refs.modalCanvasWrap.clientHeight - 16));
+    const maxHeight = Math.max(
+      240,
+      Math.min(
+        window.innerHeight * 0.56,
+        refs.modalCanvasWrap.clientHeight - 16,
+      ),
+    );
 
-    const scale = Math.min(1, maxWidth / state.modal.naturalWidth, maxHeight / state.modal.naturalHeight);
+    const scale = Math.min(
+      1,
+      maxWidth / state.modal.naturalWidth,
+      maxHeight / state.modal.naturalHeight,
+    );
 
     let width = Math.max(1, Math.floor(state.modal.naturalWidth * scale));
     let height = Math.max(1, Math.floor(state.modal.naturalHeight * scale));
@@ -1290,13 +1341,18 @@
       return;
     }
 
-    refs.modalCanvasCtx.clearRect(0, 0, state.modal.renderWidth, state.modal.renderHeight);
+    refs.modalCanvasCtx.clearRect(
+      0,
+      0,
+      state.modal.renderWidth,
+      state.modal.renderHeight,
+    );
     refs.modalCanvasCtx.drawImage(
       state.modal.baseImage,
       0,
       0,
       state.modal.renderWidth,
-      state.modal.renderHeight
+      state.modal.renderHeight,
     );
 
     const previewScale = state.modal.renderWidth / state.modal.naturalWidth;
@@ -1377,11 +1433,11 @@
     ctx.moveTo(endX, endY);
     ctx.lineTo(
       endX - headLength * Math.cos(angle - Math.PI / 6),
-      endY - headLength * Math.sin(angle - Math.PI / 6)
+      endY - headLength * Math.sin(angle - Math.PI / 6),
     );
     ctx.lineTo(
       endX - headLength * Math.cos(angle + Math.PI / 6),
-      endY - headLength * Math.sin(angle + Math.PI / 6)
+      endY - headLength * Math.sin(angle + Math.PI / 6),
     );
     ctx.closePath();
     ctx.fill();
@@ -1389,12 +1445,25 @@
 
   function getModalPoint(event) {
     const rect = refs.modalCanvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0 || !state.modal.naturalWidth || !state.modal.naturalHeight) {
+    if (
+      rect.width <= 0 ||
+      rect.height <= 0 ||
+      !state.modal.naturalWidth ||
+      !state.modal.naturalHeight
+    ) {
       return { x: 0, y: 0 };
     }
 
-    const x = clamp((event.clientX - rect.left) * (state.modal.naturalWidth / rect.width), 0, state.modal.naturalWidth);
-    const y = clamp((event.clientY - rect.top) * (state.modal.naturalHeight / rect.height), 0, state.modal.naturalHeight);
+    const x = clamp(
+      (event.clientX - rect.left) * (state.modal.naturalWidth / rect.width),
+      0,
+      state.modal.naturalWidth,
+    );
+    const y = clamp(
+      (event.clientY - rect.top) * (state.modal.naturalHeight / rect.height),
+      0,
+      state.modal.naturalHeight,
+    );
 
     return { x, y };
   }
@@ -1418,7 +1487,11 @@
   }
 
   async function renderModalAnnotatedImageData() {
-    if (!state.modal.baseImage || !state.modal.naturalWidth || !state.modal.naturalHeight) {
+    if (
+      !state.modal.baseImage ||
+      !state.modal.naturalWidth ||
+      !state.modal.naturalHeight
+    ) {
       throw new Error("No screenshot loaded in editor.");
     }
 
@@ -1428,8 +1501,19 @@
 
     const exportCtx = exportCanvas.getContext("2d", { alpha: false });
     exportCtx.fillStyle = "#ffffff";
-    exportCtx.fillRect(0, 0, state.modal.naturalWidth, state.modal.naturalHeight);
-    exportCtx.drawImage(state.modal.baseImage, 0, 0, state.modal.naturalWidth, state.modal.naturalHeight);
+    exportCtx.fillRect(
+      0,
+      0,
+      state.modal.naturalWidth,
+      state.modal.naturalHeight,
+    );
+    exportCtx.drawImage(
+      state.modal.baseImage,
+      0,
+      0,
+      state.modal.naturalWidth,
+      state.modal.naturalHeight,
+    );
 
     for (const shape of state.modal.shapes) {
       drawShape(exportCtx, shape, 1);
@@ -1457,7 +1541,7 @@
     const labels = {
       visible: "Visible",
       selection: "Selection",
-      fullpage: "Full Page"
+      fullpage: "Full Page",
     };
 
     return labels[captureType] || "Capture";
@@ -1498,7 +1582,8 @@
     hint.style.borderRadius = "8px";
     hint.style.background = "rgba(19, 26, 37, 0.9)";
     hint.style.color = "#f0f5ff";
-    hint.style.fontFamily = "ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
+    hint.style.fontFamily =
+      "ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
     hint.style.fontSize = "12px";
     hint.style.letterSpacing = "0.03em";
 
@@ -1533,7 +1618,7 @@
         y: top,
         width,
         height,
-        devicePixelRatio: window.devicePixelRatio || 1
+        devicePixelRatio: window.devicePixelRatio || 1,
       };
     }
 
@@ -1573,7 +1658,7 @@
       finish({
         ok: false,
         canceled: true,
-        error: message || "Selection canceled."
+        error: message || "Selection canceled.",
       });
     }
 
@@ -1632,7 +1717,7 @@
 
     return {
       promise,
-      cancel: () => cancelWithMessage("Selection restarted.")
+      cancel: () => cancelWithMessage("Selection restarted."),
     };
   }
 })();

@@ -10,9 +10,7 @@
     "storage",
     "unlimitedStorage"
   ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -35,13 +33,15 @@
   "options_page": "review.html",
   "content_scripts": [
     {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "content_script.js"
-      ],
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["<all_urls>"]
     }
   ]
 }
